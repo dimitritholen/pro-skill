@@ -12,6 +12,7 @@ export interface InstallOptions {
   readonly withHooks: boolean;
   readonly linkSkills: boolean;
   readonly dryRun: boolean;
+  readonly adopt?: boolean;
   readonly packageRoot: string;
 }
 
@@ -45,7 +46,7 @@ export interface ToolTarget {
 
 export interface ChangeRecord {
   readonly kind: "rules" | "skill" | "script" | "hook";
-  readonly action: "created" | "updated" | "linked" | "removed" | "unchanged";
+  readonly action: "created" | "updated" | "linked" | "removed" | "unchanged" | "preserved";
   readonly path: string;
   readonly detail?: string;
 }

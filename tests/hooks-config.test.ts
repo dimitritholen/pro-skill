@@ -113,4 +113,54 @@ describe("hooks-config", () => {
     assert.equal(removed.status, "removed");
     assert.equal(removed.content, null);
   });
+
+  it("keeps unrelated guard filenames and sibling handlers when updating/removing hooks", () => {
+    const script = "/home/demo/.agents/pro-skill/guard-tests.mjs";
+    const command = `node "${script}" --harness claude`;
+    const existing = JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Edit",
+            hooks: [
+              { type: "command", command },
+              { type: "command", command: "echo preserve-me" },
+              { type: "command", command: "node /mine/guard-tests.mjs" },
+            ],
+          },
+        ],
+      },
+    });
+    for (const content of [
+      upsertHookConfig(existing, "claude-settings", script).content,
+      removeHookConfig(existing, "claude-settings", script).content,
+    ]) {
+      assert.ok(content?.includes("preserve-me"));
+      assert.ok(content?.includes("/mine/guard-tests.mjs"));
+    }
+  });
+
+  it("matches Antigravity's documented overwrite tool with anchored regex", () => {
+    const content: unknown = JSON.parse(
+      upsertHookConfig(null, "antigravity-hooks", "/guard.mjs").content,
+    );
+    assert.match(JSON.stringify(content), /write_to_file/);
+    const config = content as Record<string, { PreToolUse: { matcher: string }[] }>;
+    const pattern = config["pro-skill-guard-tests"]?.PreToolUse[0]?.matcher;
+    assert.ok(pattern);
+    assert.equal(new RegExp(pattern).test("write_to_file"), true);
+    assert.equal(new RegExp(pattern).test("unrelated_write_to_file_tool"), false);
+  });
+
+  it("rejects malformed nested hook configuration without discarding data", () => {
+    for (const content of [
+      JSON.stringify({ hooks: [] }),
+      JSON.stringify({ hooks: { PreToolUse: {} } }),
+    ]) {
+      assert.throws(
+        () => upsertHookConfig(content, "claude-settings", "/guard.mjs"),
+        /invalid/,
+      );
+    }
+  });
 });

@@ -18,6 +18,7 @@ interface ParsedCli {
   readonly tools: readonly ToolId[];
   readonly withHooks: boolean;
   readonly linkSkills: boolean;
+  readonly adopt: boolean;
   readonly dryRun: boolean;
 }
 
@@ -34,6 +35,7 @@ Options:
   --tools <list>           Comma-separated tools: claude,pi,antigravity,codex (default: all)
   --with-hooks             Also install the optional test-tampering guard hook (Claude Code & Antigravity)
   --link                   Symlink/junction skills from this repo instead of copying
+  --adopt                  Adopt/overwrite existing unmanaged or modified skills/scripts into install state
   --dry-run                Print planned changes without writing anything
   -h, --help               Show this help message
 
@@ -81,13 +83,14 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
       tools: ALL_TOOLS,
       withHooks: false,
       linkSkills: false,
+      adopt: false,
       dryRun: false,
     };
   }
 
   const first = argv[0];
   let command: Command;
-  let startIdx = 1;
+  const startIdx = 1;
 
   if (first === "install" || first === "uninstall" || first === "status") {
     command = first;
@@ -101,6 +104,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
   let tools: readonly ToolId[] = ALL_TOOLS;
   let withHooks = false;
   let linkSkills = false;
+  let adopt = false;
   let dryRun = false;
 
   for (let i = startIdx; i < argv.length; i++) {
@@ -125,6 +129,8 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
       withHooks = true;
     } else if (arg === "--link") {
       linkSkills = true;
+    } else if (arg === "--adopt") {
+      adopt = true;
     } else if (arg === "--dry-run") {
       dryRun = true;
     } else {
@@ -132,7 +138,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
     }
   }
 
-  return { command, scope, tools, withHooks, linkSkills, dryRun };
+  return { command, scope, tools, withHooks, linkSkills, adopt, dryRun };
 }
 
 function main(): void {
@@ -153,63 +159,77 @@ function main(): void {
 
   const packageRoot = resolvePackageRoot();
 
-  if (parsed.command === "status") {
-    const reports = status({
-      scope: parsed.scope,
-      tools: parsed.tools,
-      packageRoot,
-    });
-    const scopeLabel =
-      parsed.scope.kind === "global"
-        ? `global (${parsed.scope.homeDir})`
-        : `project (${parsed.scope.projectDir})`;
-    process.stdout.write(`pro-skill status [${scopeLabel}]\n\n`);
-    for (const r of reports) {
-      const rulesBadge = r.rulesInstalled ? "installed" : "missing";
-      const skillsBadge =
-        r.missingSkills.length === 0
-          ? `${r.installedSkills.length}/${r.installedSkills.length} installed`
-          : `${r.installedSkills.length}/${r.installedSkills.length + r.missingSkills.length} (missing: ${r.missingSkills.join(", ")})`;
-      const hookBadge = !r.hookSupported
-        ? "n/a"
-        : r.hookInstalled
-          ? "installed"
-          : "off";
-      process.stdout.write(`- ${r.tool}\n`);
-      process.stdout.write(`  rules : ${rulesBadge} (${r.rulesFile})\n`);
-      process.stdout.write(`  skills: ${skillsBadge} (${r.skillsDir})\n`);
-      process.stdout.write(`  hooks : ${hookBadge}${r.hookConfigPath ? ` (${r.hookConfigPath})` : ""}\n`);
+  try {
+    if (parsed.command === "status") {
+      const reports = status({
+        scope: parsed.scope,
+        tools: parsed.tools,
+        packageRoot,
+      });
+      const scopeLabel =
+        parsed.scope.kind === "global"
+          ? `global (${parsed.scope.homeDir})`
+          : `project (${parsed.scope.projectDir})`;
+      process.stdout.write(`pro-skill status [${scopeLabel}]\n\n`);
+      for (const r of reports) {
+        const rulesBadge = r.rulesInstalled ? "installed" : "missing";
+        const skillsBadge =
+          r.missingSkills.length === 0
+            ? `${r.installedSkills.length}/${r.installedSkills.length} installed`
+            : `${r.installedSkills.length}/${r.installedSkills.length + r.missingSkills.length} (missing: ${r.missingSkills.join(", ")})`;
+        const hookBadge = !r.hookSupported
+          ? "n/a"
+          : r.hookInstalled
+            ? "installed"
+            : "off";
+        process.stdout.write(`- ${r.tool}\n`);
+        process.stdout.write(`  rules : ${rulesBadge} (${r.rulesFile})\n`);
+        process.stdout.write(`  skills: ${skillsBadge} (${r.skillsDir})\n`);
+        process.stdout.write(
+          `  hooks : ${hookBadge}${r.hookConfigPath ? ` (${r.hookConfigPath})` : ""}\n`,
+        );
+      }
+      return;
     }
-    return;
-  }
 
-  const result =
-    parsed.command === "install"
-      ? install({
-          scope: parsed.scope,
-          tools: parsed.tools,
-          withHooks: parsed.withHooks,
-          linkSkills: parsed.linkSkills,
-          dryRun: parsed.dryRun,
-          packageRoot,
-        })
-      : uninstall({
-          scope: parsed.scope,
-          tools: parsed.tools,
-          dryRun: parsed.dryRun,
-          packageRoot,
-        });
+    const result =
+      parsed.command === "install"
+        ? install({
+            scope: parsed.scope,
+            tools: parsed.tools,
+            withHooks: parsed.withHooks,
+            linkSkills: parsed.linkSkills,
+            adopt: parsed.adopt,
+            dryRun: parsed.dryRun,
+            packageRoot,
+          })
+        : uninstall({
+            scope: parsed.scope,
+            tools: parsed.tools,
+            dryRun: parsed.dryRun,
+            packageRoot,
+          });
 
-  const prefix = result.dryRun ? "[dry-run] " : "";
-  if (result.changes.length === 0) {
-    process.stdout.write(`${prefix}Nothing to change.\n`);
-    return;
-  }
+    const prefix = result.dryRun ? "[dry-run] " : "";
+    if (result.changes.length === 0) {
+      process.stdout.write(`${prefix}Nothing to change.\n`);
+      return;
+    }
 
-  for (const change of result.changes) {
-    process.stdout.write(
-      `${prefix}${change.action.padEnd(9)} ${change.kind.padEnd(6)} ${change.path}\n`,
+    for (const change of result.changes) {
+      const detail =
+        change.action === "preserved" && change.detail
+          ? ` (${change.detail})`
+          : "";
+      process.stdout.write(
+        `${prefix}${change.action.padEnd(9)} ${change.kind.padEnd(6)} ${change.path}${detail}\n`,
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `Error: ${err instanceof Error ? err.message : String(err)}\n`,
     );
+    process.exit(1);
   }
 }
 

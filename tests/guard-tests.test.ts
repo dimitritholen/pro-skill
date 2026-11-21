@@ -21,11 +21,58 @@ function runGuard(
   return spawnSync(process.execPath, [GUARD_SCRIPT, "--harness", harness], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, ...envOverrides },
+    env: { ...process.env, PRO_SKILL_TEST_GUARD: "ask", ...envOverrides },
   });
 }
 
 describe("guard-tests.mjs", () => {
+  it("finds repository locks above cwd and accepts Antigravity workspace metadata", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-lock-"));
+    try {
+      fs.mkdirSync(path.join(tmp, ".git"));
+      const nested = path.join(tmp, "src");
+      fs.mkdirSync(nested);
+      fs.writeFileSync(path.join(tmp, ".pro-skill-lock-tests"), "");
+      const test = path.join(nested, "example.test.ts");
+      fs.writeFileSync(test, "existing test");
+      assert.equal(runGuard("claude", { cwd: nested, tool_input: { file_path: test } }).status, 2);
+      const result = runGuard("antigravity", { workspacePaths: [tmp],
+        toolCall: { name: "write_to_file", args: { TargetFile: test, Overwrite: true } } });
+      assert.equal((JSON.parse(result.stdout) as { decision: string }).decision, "deny");
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  });
+
+  it("does not silently allow unrecognized or malformed input, including deny mode", () => {
+    for (const harness of ["claude", "antigravity"] as const) {
+      const result = runGuard(harness, { tool_input: { unexpected: "schema drift" } }, { PRO_SKILL_TEST_GUARD: "deny" });
+      if (harness === "claude") assert.equal(result.status, 2);
+      else assert.equal((JSON.parse(result.stdout) as { decision: string }).decision, "deny");
+    }
+    const malformed = spawnSync(process.execPath, [GUARD_SCRIPT], { input: "{broken", encoding: "utf8",
+      env: { ...process.env, PRO_SKILL_TEST_GUARD: "deny" } });
+    assert.equal(malformed.status, 2);
+  });
+
+  it("supports explicit off and deny modes without inherited environment affecting the result", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-mode-"));
+    try {
+      const test = path.join(tmp, "test_sample.py");
+      fs.writeFileSync(test, "existing test");
+      const src = path.join(tmp, "app.py");
+      fs.writeFileSync(src, "x = 1\n");
+      const payload = { cwd: tmp, tool_input: { file_path: test } };
+      assert.equal(runGuard("claude", payload, { PRO_SKILL_TEST_GUARD: "deny" }).status, 2);
+      assert.equal(runGuard("claude", payload, { PRO_SKILL_TEST_GUARD: "bogus" }).status, 2);
+      // Empty string falls back to default "ask" mode instead of denying non-test files
+      assert.equal(
+        runGuard("claude", { cwd: tmp, tool_input: { file_path: src } }, { PRO_SKILL_TEST_GUARD: "" }).status,
+        0,
+      );
+      fs.writeFileSync(path.join(tmp, ".pro-skill-lock-tests"), "");
+      assert.equal(runGuard("claude", payload, { PRO_SKILL_TEST_GUARD: "off" }).status, 0);
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  });
+
   it("allows editing non-test files and creating brand-new test files", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-guard-"));
     try {

@@ -30,7 +30,7 @@ export function resolveToolTarget(tool: ToolId, scope: InstallScope): ToolTarget
         return {
           tool,
           rulesFile: path.join(home, ".gemini", "config", "AGENTS.md"),
-          skillsDir: sharedSkillsDir,
+          skillsDir: path.join(home, ".gemini", "config", "skills"),
           hook: {
             format: "antigravity-hooks",
             configPath: path.join(home, ".gemini", "config", "hooks.json"),

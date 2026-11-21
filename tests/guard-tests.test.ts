@@ -58,8 +58,16 @@ describe("guard-tests.mjs", () => {
     try {
       const test = path.join(tmp, "test_sample.py");
       fs.writeFileSync(test, "existing test");
+      const src = path.join(tmp, "app.py");
+      fs.writeFileSync(src, "x = 1\n");
       const payload = { cwd: tmp, tool_input: { file_path: test } };
       assert.equal(runGuard("claude", payload, { PRO_SKILL_TEST_GUARD: "deny" }).status, 2);
+      assert.equal(runGuard("claude", payload, { PRO_SKILL_TEST_GUARD: "bogus" }).status, 2);
+      // Empty string falls back to default "ask" mode instead of denying non-test files
+      assert.equal(
+        runGuard("claude", { cwd: tmp, tool_input: { file_path: src } }, { PRO_SKILL_TEST_GUARD: "" }).status,
+        0,
+      );
       fs.writeFileSync(path.join(tmp, ".pro-skill-lock-tests"), "");
       assert.equal(runGuard("claude", payload, { PRO_SKILL_TEST_GUARD: "off" }).status, 0);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

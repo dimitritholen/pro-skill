@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { isToolId, type InstallScope, type ToolId } from "./types.js";
 
+export const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
 export interface OwnedResource {
   readonly kind: "skill" | "script";
   readonly path: string;
@@ -14,6 +16,10 @@ export interface InstallState {
   readonly version: 1;
   readonly tools: readonly ToolId[];
   readonly resources: readonly OwnedResource[];
+}
+
+export function isValidSkillName(name: string): boolean {
+  return SKILL_NAME_PATTERN.test(name);
 }
 
 export function scopeRoot(scope: InstallScope): string {
@@ -46,7 +52,9 @@ export function assertSafePath(scope: InstallScope, target: string, allowLeafLin
   }
   if (!allowLeafLink) {
     try {
-      if (fs.lstatSync(target).isSymbolicLink()) throw new Error(`Refusing to write through linked file: ${target}`);
+      if (fs.lstatSync(target).isSymbolicLink()) {
+        throw new Error(`Refusing to write through linked file: ${target}`);
+      }
     } catch (err) {
       if (!(err instanceof Error && "code" in err && err.code === "ENOENT")) throw err;
     }
@@ -62,19 +70,28 @@ export function fingerprint(target: string): string | null {
     throw err;
   }
   // Track the link, not its changing source content. Never traverse nested links.
-  if (stat.isSymbolicLink()) return `link:${path.resolve(path.dirname(target), fs.readlinkSync(target))}`;
-  if (stat.isFile()) return `file:${createHash("sha256").update(fs.readFileSync(target)).digest("hex")}`;
+  if (stat.isSymbolicLink()) {
+    return `link:${path.resolve(path.dirname(target), fs.readlinkSync(target))}`;
+  }
+  if (stat.isFile()) {
+    return `file:${createHash("sha256").update(fs.readFileSync(target)).digest("hex")}`;
+  }
   if (!stat.isDirectory()) throw new Error(`Unsupported resource: ${target}`);
-  const entries = fs.readdirSync(target).sort().map((name) => [name, fingerprint(path.join(target, name))]);
+  const entries = fs
+    .readdirSync(target)
+    .sort()
+    .map((name) => [name, fingerprint(path.join(target, name))]);
   return `dir:${createHash("sha256").update(JSON.stringify(entries)).digest("hex")}`;
 }
 
-function object(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid install state object");
+function asObject(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid install state object");
+  }
   return value as Record<string, unknown>;
 }
 
-function tools(value: unknown): ToolId[] {
+function parseTools(value: unknown): ToolId[] {
   if (!Array.isArray(value) || !value.every((item: unknown) => typeof item === "string" && isToolId(item))) {
     throw new Error("Invalid install state tools");
   }
@@ -86,10 +103,12 @@ export function readState(scope: InstallScope): InstallState {
   assertSafePath(scope, file);
   if (!fs.existsSync(file)) return { version: 1, tools: [], resources: [] };
   const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
-  const root = object(parsed);
-  if (root["version"] !== 1 || !Array.isArray(root["resources"])) throw new Error("Unsupported install state");
+  const root = asObject(parsed);
+  if (root["version"] !== 1 || !Array.isArray(root["resources"])) {
+    throw new Error("Unsupported install state");
+  }
   const resources = root["resources"].map((entry: unknown): OwnedResource => {
-    const rec = object(entry);
+    const rec = asObject(entry);
     const kind = rec["kind"];
     const resourcePath = rec["path"];
     const hash = rec["fingerprint"];
@@ -98,34 +117,58 @@ export function readState(scope: InstallScope): InstallState {
     }
     const absolute = path.resolve(scopeRoot(scope), resourcePath);
     const relative = path.relative(scopeRoot(scope), absolute).replace(/\\/g, "/");
-    const allowed = kind === "script" ? relative === ".agents/pro-skill/guard-tests.mjs"
-      : /^(\.agents|\.claude|\.gemini\/config)\/skills\/[a-z0-9][a-z0-9-]*$/.test(relative);
+    const allowed =
+      kind === "script"
+        ? relative === ".agents/pro-skill/guard-tests.mjs"
+        : /^(\.agents|\.claude|\.gemini\/config)\/skills\/[a-z0-9][a-z0-9-]*$/.test(relative);
     if (!allowed) throw new Error(`Unsafe install state path: ${resourcePath}`);
     assertSafePath(scope, absolute, kind === "skill");
-    return { kind, path: absolute, fingerprint: hash, owners: tools(rec["owners"]) };
+    return { kind, path: absolute, fingerprint: hash, owners: parseTools(rec["owners"]) };
   });
-  return { version: 1, tools: tools(root["tools"]), resources };
+  return { version: 1, tools: parseTools(root["tools"]), resources };
 }
 
 export function writeState(scope: InstallScope, state: InstallState): void {
   const file = statePath(scope);
   if (state.tools.length === 0 && state.resources.length === 0) {
     if (fs.existsSync(file)) fs.unlinkSync(file);
+    const parent = path.dirname(file);
+    if (fs.existsSync(parent) && fs.readdirSync(parent).length === 0) {
+      fs.rmdirSync(parent);
+    }
     return;
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const serialized = JSON.stringify({ ...state, resources: state.resources.map((resource) => ({
-    ...resource, path: path.relative(scopeRoot(scope), resource.path),
-  })) }, null, 2) + "\n";
+  const serialized =
+    JSON.stringify(
+      {
+        ...state,
+        resources: state.resources.map((resource) => ({
+          ...resource,
+          path: path.relative(scopeRoot(scope), resource.path),
+        })),
+      },
+      null,
+      2,
+    ) + "\n";
   const temporary = `${file}.tmp`;
   fs.writeFileSync(temporary, serialized, "utf8");
   fs.renameSync(temporary, file);
 }
 
-export function assertWritable(target: string, state: InstallState): void {
+export function assertWritable(target: string, state: InstallState, adopt = false): void {
+  if (adopt) return;
   const current = fingerprint(target);
   if (current === null) return;
   const owned = state.resources.find((resource) => resource.path === path.resolve(target));
-  if (!owned) throw new Error(`Refusing to overwrite unmanaged resource: ${target}. Move it aside before installing.`);
-  if (owned.fingerprint !== current) throw new Error(`Refusing to overwrite locally modified resource: ${target}. Save or move your changes first.`);
+  if (!owned) {
+    throw new Error(
+      `Refusing to overwrite unmanaged resource: ${target}. Move it aside or pass --adopt to migrate an existing pro-skill install.`,
+    );
+  }
+  if (owned.fingerprint !== current) {
+    throw new Error(
+      `Refusing to overwrite locally modified resource: ${target}. Save or move your changes first, or pass --adopt to overwrite.`,
+    );
+  }
 }

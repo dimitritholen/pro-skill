@@ -12,6 +12,7 @@ export interface InstallOptions {
   readonly withHooks: boolean;
   readonly linkSkills: boolean;
   readonly dryRun: boolean;
+  readonly adopt?: boolean;
   readonly packageRoot: string;
 }
 

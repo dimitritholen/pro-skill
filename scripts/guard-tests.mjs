@@ -115,7 +115,8 @@ export function extractTargetPath(payload, harness) {
  * @returns {{ action: "allow" | "ask" | "deny"; reason?: string }}
  */
 export function evaluateGuard(payload, harness, env = process.env) {
-  const mode = (env["PRO_SKILL_TEST_GUARD"] ?? "ask").toLowerCase();
+  const rawMode = (env["PRO_SKILL_TEST_GUARD"] ?? "").trim().toLowerCase();
+  const mode = rawMode.length === 0 ? "ask" : rawMode;
   if (mode === "off") {
     return { action: "allow" };
   }

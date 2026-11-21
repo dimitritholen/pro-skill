@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafePath, assertWritable, fingerprint, readState, writeState, type OwnedResource } from "./install-state.js";
+import {
+  assertSafePath,
+  assertWritable,
+  fingerprint,
+  isValidSkillName,
+  readState,
+  writeState,
+  type OwnedResource,
+} from "./install-state.js";
 import {
   isHookInstalled,
   removeHookConfig,
@@ -125,19 +133,25 @@ export function install(options: InstallOptions): OperationResult {
   const targets = resolveTargets(options.tools, options.scope);
 
   const state = readState(options.scope);
+  const adopt = options.adopt === true;
   const resources = new Map(state.resources.map((resource) => [resource.path, resource]));
   // Preflight every collision and config before any writes, including dry-runs.
+  for (const skillName of skillNames) {
+    if (!isValidSkillName(skillName)) {
+      throw new Error(`Invalid bundled skill name: ${skillName}`);
+    }
+  }
   for (const target of targets) {
     assertSafePath(options.scope, target.rulesFile);
     for (const skillName of skillNames) {
       const dest = path.join(target.skillsDir, skillName);
       assertSafePath(options.scope, dest, true);
-      assertWritable(dest, state);
+      assertWritable(dest, state, adopt);
     }
     if (options.withHooks && target.hook) {
       assertSafePath(options.scope, target.hook.configPath);
       assertSafePath(options.scope, target.hook.scriptInstallPath);
-      assertWritable(target.hook.scriptInstallPath, state);
+      assertWritable(target.hook.scriptInstallPath, state, adopt);
       upsertHookConfig(readOptionalFile(target.hook.configPath), target.hook.format, target.hook.scriptInstallPath);
     }
   }

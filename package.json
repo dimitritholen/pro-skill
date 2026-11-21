@@ -20,7 +20,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "node --test dist/tests/*.test.js",
+    "test": "node --test dist/tests",
     "verify": "npm run typecheck && npm run build && npm test",
     "pro-skill": "node dist/src/cli.js"
   },

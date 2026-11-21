@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { assertSafePath, assertWritable, fingerprint, readState, writeState, type OwnedResource } from "./install-state.js";
 import {
   isHookInstalled,
   removeHookConfig,
@@ -123,6 +124,32 @@ export function install(options: InstallOptions): OperationResult {
   const skillNames = listBundledSkills(options.packageRoot);
   const targets = resolveTargets(options.tools, options.scope);
 
+  const state = readState(options.scope);
+  const resources = new Map(state.resources.map((resource) => [resource.path, resource]));
+  // Preflight every collision and config before any writes, including dry-runs.
+  for (const target of targets) {
+    assertSafePath(options.scope, target.rulesFile);
+    for (const skillName of skillNames) {
+      const dest = path.join(target.skillsDir, skillName);
+      assertSafePath(options.scope, dest, true);
+      assertWritable(dest, state);
+    }
+    if (options.withHooks && target.hook) {
+      assertSafePath(options.scope, target.hook.configPath);
+      assertSafePath(options.scope, target.hook.scriptInstallPath);
+      assertWritable(target.hook.scriptInstallPath, state);
+      upsertHookConfig(readOptionalFile(target.hook.configPath), target.hook.format, target.hook.scriptInstallPath);
+    }
+  }
+  function remember(target: string, kind: OwnedResource["kind"], owner: typeof options.tools[number]): void {
+    if (options.dryRun) return;
+    const key = path.resolve(target);
+    const hash = fingerprint(key);
+    if (hash === null) throw new Error(`Installed resource missing: ${key}`);
+    resources.set(key, { path: key, kind, fingerprint: hash,
+      owners: [...new Set([...(resources.get(key)?.owners ?? []), owner])] });
+  }
+
   const changes: ChangeRecord[] = [];
   const seenRuleFiles = new Set<string>();
   const seenSkillDirs = new Set<string>();
@@ -159,6 +186,7 @@ export function install(options: InstallOptions): OperationResult {
         );
       }
     }
+    for (const skillName of skillNames) remember(path.join(target.skillsDir, skillName), "skill", target.tool);
 
     // 3. Optional guard hooks
     if (options.withHooks && target.hook) {
@@ -186,6 +214,7 @@ export function install(options: InstallOptions): OperationResult {
           });
         }
       }
+      remember(target.hook.scriptInstallPath, "script", target.tool);
 
       const hookKey = path.resolve(target.hook.configPath);
       if (!seenHookConfigs.has(hookKey)) {
@@ -210,23 +239,48 @@ export function install(options: InstallOptions): OperationResult {
     }
   }
 
+  if (!options.dryRun) writeState(options.scope, { version: 1,
+    tools: [...new Set([...state.tools, ...options.tools])], resources: [...resources.values()] });
   return { dryRun: options.dryRun, changes };
 }
 
 export function uninstall(options: UninstallOptions): OperationResult {
-  const skillNames = listBundledSkills(options.packageRoot);
-  const targets = resolveTargets(options.tools, options.scope);
+  const state = readState(options.scope);
+  const removing = options.tools.filter((tool) => state.tools.includes(tool));
+  const remainingTools = state.tools.filter((tool) => !removing.includes(tool));
+  const remainingTargets = resolveTargets(remainingTools, options.scope);
+  const targets = resolveTargets(removing, options.scope);
+  const retainedResources: OwnedResource[] = [];
+  for (const target of targets) {
+    assertSafePath(options.scope, target.rulesFile);
+    if (target.hook) assertSafePath(options.scope, target.hook.configPath);
+  }
 
   const changes: ChangeRecord[] = [];
   const seenRuleFiles = new Set<string>();
-  const seenSkillDirs = new Set<string>();
-  const seenScripts = new Set<string>();
   const seenHookConfigs = new Set<string>();
+
+  for (const resource of state.resources) {
+    const owners = resource.owners.filter((tool) => !removing.includes(tool));
+    if (owners.length > 0) {
+      retainedResources.push({ ...resource, owners });
+      continue;
+    }
+    const current = fingerprint(resource.path);
+    if (current === null) continue;
+    if (current !== resource.fingerprint) {
+      changes.push({ kind: resource.kind, action: "preserved", path: resource.path,
+        detail: "Local modifications preserved; resource is now unmanaged." });
+      continue;
+    }
+    if (!options.dryRun) fs.rmSync(resource.path, { recursive: resource.kind === "skill", force: true });
+    changes.push({ kind: resource.kind, action: "removed", path: resource.path });
+  }
 
   for (const target of targets) {
     // 1. Rules
     const ruleKey = path.resolve(target.rulesFile);
-    if (!seenRuleFiles.has(ruleKey)) {
+    if (!seenRuleFiles.has(ruleKey) && !remainingTargets.some((other) => path.resolve(other.rulesFile) === ruleKey)) {
       seenRuleFiles.add(ruleKey);
       const existing = readOptionalFile(target.rulesFile);
       if (existing !== null) {
@@ -254,35 +308,13 @@ export function uninstall(options: UninstallOptions): OperationResult {
       }
     }
 
-    // 2. Skills
-    const skillDirKey = path.resolve(target.skillsDir);
-    if (!seenSkillDirs.has(skillDirKey)) {
-      seenSkillDirs.add(skillDirKey);
-      for (const skillName of skillNames) {
-        const dest = path.join(target.skillsDir, skillName);
-        let exists = false;
-        try {
-          fs.lstatSync(dest);
-          exists = true;
-        } catch {
-          exists = false;
-        }
-        if (exists) {
-          if (!options.dryRun) {
-            fs.rmSync(dest, { recursive: true, force: true });
-          }
-          changes.push({ kind: "skill", action: "removed", path: dest });
-        }
-      }
-    }
-
-    // 3. Hooks & guard script
+    // Hooks are private to each integration; resource ownership handles scripts.
     if (target.hook) {
       const hookKey = path.resolve(target.hook.configPath);
       if (!seenHookConfigs.has(hookKey)) {
         seenHookConfigs.add(hookKey);
         const existingConfig = readOptionalFile(target.hook.configPath);
-        const res = removeHookConfig(existingConfig, target.hook.format);
+        const res = removeHookConfig(existingConfig, target.hook.format, target.hook.scriptInstallPath);
         if (res.status === "removed") {
           if (!options.dryRun) {
             if (res.content === null) {
@@ -298,28 +330,10 @@ export function uninstall(options: UninstallOptions): OperationResult {
           });
         }
       }
-
-      const scriptKey = path.resolve(target.hook.scriptInstallPath);
-      if (!seenScripts.has(scriptKey)) {
-        seenScripts.add(scriptKey);
-        if (fs.existsSync(target.hook.scriptInstallPath)) {
-          if (!options.dryRun) {
-            fs.unlinkSync(target.hook.scriptInstallPath);
-            const parent = path.dirname(target.hook.scriptInstallPath);
-            if (fs.existsSync(parent) && fs.readdirSync(parent).length === 0) {
-              fs.rmdirSync(parent);
-            }
-          }
-          changes.push({
-            kind: "script",
-            action: "removed",
-            path: target.hook.scriptInstallPath,
-          });
-        }
-      }
     }
   }
 
+  if (!options.dryRun) writeState(options.scope, { version: 1, tools: remainingTools, resources: retainedResources });
   return { dryRun: options.dryRun, changes };
 }
 
@@ -345,9 +359,11 @@ export function status(options: StatusOptions): readonly ToolStatusReport[] {
     const hookSupported = target.hook !== undefined;
     const hookInstalled =
       target.hook !== undefined &&
+      fs.existsSync(target.hook.scriptInstallPath) &&
       isHookInstalled(
         readOptionalFile(target.hook.configPath),
         target.hook.format,
+        target.hook.scriptInstallPath,
       );
 
     return {

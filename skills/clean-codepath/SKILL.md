@@ -5,14 +5,14 @@ description: Keep repositories lean with a single active code path—delete supe
 
 # Clean Codepath
 
-Git history is your archive. `HEAD` should contain only one valid, active way to do each thing.
+Git history is your archive. Remove obsolete implementations while preserving paths required by live consumers, resilience, or a safe rollout.
 
 ## 1. One Valid Code Path
 When replacing an implementation, schema, route, or helper:
 - **Replace in place** rather than creating `fooV2`, `legacyFoo`, or dual-write fallback branches unless an explicit live-migration rollout requires a temporary bridge.
 - Remove obsolete helpers, feature flags, dead config keys, unused types, and stale imports in the same change.
 - Never leave commented-out "just in case" code blocks—commit history preserves prior versions cleanly.
-- If a temporary compatibility shim is genuinely required (e.g., rolling deploy or external consumers), mark it with an explicit removal condition/owner.
+- If a temporary compatibility shim is genuinely required (e.g., rolling deploy or external consumers), mark it with an explicit removal condition/owner and test the transition. Do not delete required compatibility merely to satisfy a single-path preference.
 
 ## 2. Scoped Kitchen Cleanup
 "Clean as you cook" works only when bounded:

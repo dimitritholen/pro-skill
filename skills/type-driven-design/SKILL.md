@@ -15,11 +15,12 @@ Use the type system as an executable specification that catches whole classes of
 ## 2. Parse, Don't Validate
 - Treat external input (HTTP payloads, CLI args, JSON files, env vars, tool stdin) as `unknown`.
 - Parse once at the system boundary into strict domain types; keep internal functions free of repetitive defensive null/type checks.
+- Static types do not validate JSON, authorize actions, enforce database constraints, or prevent concurrent state changes. Keep runtime checks at the layers responsible for those guarantees.
 - Avoid `any`, unchecked `as SomeType` assertions, and non-null `!` escapes. When narrowing is required, write a small, tested type guard or parser.
 
 ## 3. Compiler-Driven Refactoring
 - Change the type signature or domain model **first**, then follow every compiler error systematically until the codebase typechecks cleanly.
-- Keep strict compiler settings enabled (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` in TypeScript; equivalent strict flags in Rust/Go/C#/Swift).
+- Keep the project's strict compiler settings enabled (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` in TypeScript). Use each language's own compiler and analysis tools rather than assuming equivalent flags exist everywhere.
 
 ## 4. Tool-Enforced Architecture
 - Don't rely on prose docs alone to protect module boundaries. Prefer enforcing direction of dependencies, public module entry points, and forbidden imports via linter rules, package exports, or separate workspace packages.

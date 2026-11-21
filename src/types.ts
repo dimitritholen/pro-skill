@@ -45,7 +45,7 @@ export interface ToolTarget {
 
 export interface ChangeRecord {
   readonly kind: "rules" | "skill" | "script" | "hook";
-  readonly action: "created" | "updated" | "linked" | "removed" | "unchanged";
+  readonly action: "created" | "updated" | "linked" | "removed" | "unchanged" | "preserved";
   readonly path: string;
   readonly detail?: string;
 }

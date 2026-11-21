@@ -2,7 +2,6 @@ import type { HookFormat } from "./types.js";
 import { assertNever } from "./types.js";
 
 export const ANTIGRAVITY_HOOK_KEY = "pro-skill-guard-tests";
-const CLAUDE_HOOK_MARKER = "guard-tests.mjs";
 
 type JsonObject = Record<string, unknown>;
 
@@ -15,10 +14,11 @@ function asObject(value: unknown): JsonObject {
 
 function buildCommand(scriptPath: string, harness: "claude" | "antigravity"): string {
   const normalized = scriptPath.replace(/\\/g, "/");
+  if (/["`$%\r\n]/.test(normalized)) throw new Error("Hook script path contains unsupported shell characters");
   return `node "${normalized}" --harness ${harness}`;
 }
 
-export function isHookInstalled(rawJson: string | null, format: HookFormat): boolean {
+export function isHookInstalled(rawJson: string | null, format: HookFormat, scriptPath?: string): boolean {
   if (rawJson === null || rawJson.trim().length === 0) return false;
   let parsed: unknown;
   try {
@@ -29,14 +29,27 @@ export function isHookInstalled(rawJson: string | null, format: HookFormat): boo
   const root = asObject(parsed);
 
   switch (format) {
-    case "antigravity-hooks":
-      return Object.prototype.hasOwnProperty.call(root, ANTIGRAVITY_HOOK_KEY);
+    case "antigravity-hooks": {
+      const entry = asObject(root[ANTIGRAVITY_HOOK_KEY]);
+      if (entry["enabled"] === false || !Array.isArray(entry["PreToolUse"])) return false;
+      return entry["PreToolUse"].some((group: unknown) => {
+        const handlers = asObject(group)["hooks"];
+        return Array.isArray(handlers) && handlers.some((handler: unknown) => {
+          const rec = asObject(handler);
+          return typeof rec["command"] === "string" &&
+            (scriptPath === undefined || rec["command"] === buildCommand(scriptPath, "antigravity"));
+        });
+      });
+    }
 
     case "claude-settings": {
       const hooks = asObject(root["hooks"]);
       const preToolUse = hooks["PreToolUse"];
       if (!Array.isArray(preToolUse)) return false;
-      return preToolUse.some((entry) => isProSkillClaudeEntry(entry));
+      return preToolUse.some((entry) => {
+        const handlers = asObject(entry)["hooks"];
+        return Array.isArray(handlers) && handlers.some((handler: unknown) => isProSkillClaudeHandler(handler, scriptPath));
+      });
     }
 
     default:
@@ -44,16 +57,22 @@ export function isHookInstalled(rawJson: string | null, format: HookFormat): boo
   }
 }
 
-function isProSkillClaudeEntry(entry: unknown): boolean {
-  const obj = asObject(entry);
-  const hooks = obj["hooks"];
-  if (!Array.isArray(hooks)) return false;
-  return hooks.some((h) => {
-    const rec = asObject(h);
-    return (
-      typeof rec["command"] === "string" &&
-      rec["command"].includes(CLAUDE_HOOK_MARKER)
-    );
+function isProSkillClaudeHandler(handler: unknown, scriptPath?: string): boolean {
+  const rec = asObject(handler);
+  const command = rec["command"];
+  if (typeof command !== "string" || rec["type"] !== "command") return false;
+  if (scriptPath !== undefined) return command === buildCommand(scriptPath, "claude");
+  return /^node "[^"\r\n]*\/\.agents\/pro-skill\/guard-tests\.mjs" --harness claude$/.test(command);
+}
+
+function withoutManagedHandlers(entries: readonly unknown[], scriptPath?: string): unknown[] {
+  return entries.flatMap((entry: unknown) => {
+    const obj = asObject(entry);
+    const handlers = obj["hooks"];
+    if (!Array.isArray(handlers)) return [entry];
+    const remaining = handlers.filter((handler: unknown) => !isProSkillClaudeHandler(handler, scriptPath));
+    if (remaining.length === handlers.length) return [entry];
+    return remaining.length === 0 ? [] : [{ ...obj, hooks: remaining }];
   });
 }
 
@@ -66,7 +85,9 @@ export function upsertHookConfig(
   let root: JsonObject = {};
   if (existed) {
     try {
-      root = asObject(JSON.parse(rawJson));
+      const parsed: unknown = JSON.parse(rawJson);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Expected a JSON object");
+      root = asObject(parsed);
     } catch (err) {
       throw new Error(
         `Refusing to overwrite invalid JSON config: ${err instanceof Error ? err.message : String(err)}`,
@@ -83,7 +104,7 @@ export function upsertHookConfig(
         PreToolUse: [
           {
             matcher:
-              "edit_file|write_file|replace_file_content|multi_replace_file_content",
+              "^(edit_file|write_file|write_to_file|replace_file_content|multi_replace_file_content)$",
             hooks: [
               {
                 type: "command",
@@ -102,9 +123,15 @@ export function upsertHookConfig(
     }
 
     case "claude-settings": {
+      if (root["hooks"] !== undefined && (root["hooks"] === null || typeof root["hooks"] !== "object" || Array.isArray(root["hooks"]))) {
+        throw new Error("Refusing to overwrite invalid hooks object");
+      }
       const existingHooks = asObject(root["hooks"]);
+      if (existingHooks["PreToolUse"] !== undefined && !Array.isArray(existingHooks["PreToolUse"])) {
+        throw new Error("Refusing to overwrite invalid PreToolUse handlers");
+      }
       const existingPre = Array.isArray(existingHooks["PreToolUse"])
-        ? existingHooks["PreToolUse"].filter((e) => !isProSkillClaudeEntry(e))
+        ? withoutManagedHandlers(existingHooks["PreToolUse"], scriptPath)
         : [];
       const newEntry = {
         matcher: "Edit|Write|MultiEdit",
@@ -143,6 +170,7 @@ export function upsertHookConfig(
 export function removeHookConfig(
   rawJson: string | null,
   format: HookFormat,
+  scriptPath?: string,
 ): { readonly content: string | null; readonly status: "removed" | "unchanged" } {
   if (rawJson === null || rawJson.trim().length === 0) {
     return { content: rawJson, status: "unchanged" };
@@ -176,8 +204,8 @@ export function removeHookConfig(
       if (!Array.isArray(existingPre)) {
         return { content: rawJson, status: "unchanged" };
       }
-      const remaining = existingPre.filter((e) => !isProSkillClaudeEntry(e));
-      if (remaining.length === existingPre.length) {
+      const remaining = withoutManagedHandlers(existingPre, scriptPath);
+      if (JSON.stringify(remaining) === JSON.stringify(existingPre)) {
         return { content: rawJson, status: "unchanged" };
       }
 

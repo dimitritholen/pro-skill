@@ -58,6 +58,17 @@ export function hasLockFile(startDir, stopDir) {
   }
 }
 
+/** @param {string} startDir */
+function repositoryBoundary(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+}
+
 /**
  * Extract target file path from Claude Code or Antigravity PreToolUse payload.
  * @param {unknown} payload
@@ -109,23 +120,25 @@ export function evaluateGuard(payload, harness, env = process.env) {
     return { action: "allow" };
   }
 
-  const rawPath = extractTargetPath(payload, harness);
-  if (!rawPath) {
-    return { action: "allow" };
-  }
-
+  const obj = payload && typeof payload === "object"
+    ? /** @type {Record<string, unknown>} */ (payload) : {};
+  const workspaces = Array.isArray(obj["workspacePaths"]) ? obj["workspacePaths"] : [];
   const cwd =
-    payload &&
-    typeof payload === "object" &&
-    typeof /** @type {Record<string, unknown>} */ (payload)["cwd"] === "string"
-      ? /** @type {string} */ (/** @type {Record<string, unknown>} */ (payload)["cwd"])
-      : process.cwd();
+    typeof obj["cwd"] === "string" ? obj["cwd"]
+      : typeof workspaces[0] === "string" ? workspaces[0] : process.cwd();
+  const boundary = repositoryBoundary(cwd);
+  const rawPath = extractTargetPath(payload, harness);
+  if (!["ask", "deny"].includes(mode) || !rawPath) {
+    return { action: mode !== "ask" || hasLockFile(cwd, boundary) ? "deny" : "ask",
+      reason: "pro-skill could not interpret the edit payload or guard mode. Check the hook integration before proceeding." };
+  }
 
   const resolvedPath = path.isAbsolute(rawPath)
     ? rawPath
     : path.resolve(cwd, rawPath);
 
-  if (!isTestFile(resolvedPath)) {
+  const realPath = fs.existsSync(resolvedPath) ? fs.realpathSync(resolvedPath) : resolvedPath;
+  if (!isTestFile(resolvedPath) && !isTestFile(realPath)) {
     return { action: "allow" };
   }
 
@@ -135,7 +148,9 @@ export function evaluateGuard(payload, harness, env = process.env) {
   }
 
   const strictLocked =
-    mode === "deny" || hasLockFile(path.dirname(resolvedPath), cwd);
+    mode === "deny" || hasLockFile(cwd, boundary) ||
+    hasLockFile(path.dirname(resolvedPath), repositoryBoundary(path.dirname(resolvedPath))) ||
+    hasLockFile(path.dirname(realPath), repositoryBoundary(path.dirname(realPath)));
 
   const relPath = path.relative(cwd, resolvedPath) || resolvedPath;
 
@@ -177,7 +192,12 @@ async function main() {
     }
   }
 
-  const result = evaluateGuard(payload, harness, process.env);
+  let result;
+  try {
+    result = evaluateGuard(payload, harness, process.env);
+  } catch (err) {
+    result = { action: "deny", reason: `pro-skill could not inspect the edit: ${err instanceof Error ? err.message : String(err)}` };
+  }
 
   if (harness === "antigravity") {
     if (result.action === "allow") {

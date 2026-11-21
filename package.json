@@ -1,0 +1,30 @@
+{
+  "name": "pro-skill",
+  "version": "0.1.0",
+  "description": "Installable engineering discipline, validation-loop skills, and optional test-guard hooks for Claude Code, Pi, Antigravity, and Codex.",
+  "type": "module",
+  "bin": {
+    "pro-skill": "./dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "rules",
+    "skills",
+    "scripts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "node --test dist/tests/*.test.js",
+    "verify": "npm run typecheck && npm run build && npm test",
+    "pro-skill": "node dist/src/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

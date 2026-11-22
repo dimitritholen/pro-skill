@@ -75,3 +75,9 @@ export function isToolId(value: string): value is ToolId {
 export function assertNever(value: never): never {
   throw new Error(`Unexpected value: ${String(value)}`);
 }
+
+export interface UpdateOptions {
+  readonly scope: InstallScope;
+  readonly dryRun: boolean;
+  readonly packageRoot: string;
+}

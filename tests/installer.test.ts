@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { install, listBundledSkills, status, uninstall } from "../src/installer.js";
+import { install, listBundledSkills, status, uninstall, update } from "../src/installer.js";
 import { ALL_TOOLS, type InstallOptions } from "../src/types.js";
 
 const PACKAGE_ROOT = path.resolve(
@@ -307,6 +307,77 @@ describe("installer", () => {
     });
   });
 
+  function fakePackage(root: string): { source: string; rules: string; skill: string } {
+    const source = path.join(root, "package");
+    fs.mkdirSync(path.join(source, "skills", "example"), { recursive: true });
+    fs.mkdirSync(path.join(source, "rules"));
+    fs.mkdirSync(path.join(source, "scripts"));
+    fs.copyFileSync(
+      path.join(PACKAGE_ROOT, "scripts", "guard-tests.mjs"),
+      path.join(source, "scripts", "guard-tests.mjs"),
+    );
+    const rules = path.join(source, "rules", "core.md");
+    const skill = path.join(source, "skills", "example", "SKILL.md");
+    fs.writeFileSync(rules, "rules v1");
+    fs.writeFileSync(skill, "skill v1");
+    return { source, rules, skill };
+  }
+
+  it("update reapplies each tool's recorded hooks and link mode", () => {
+    withTempRoot("pro-skill-update-", (options, root) => {
+      const pkg = fakePackage(root);
+      const base = { ...options, packageRoot: pkg.source };
+      install({ ...base, tools: ["claude"], withHooks: true, linkSkills: true });
+      install({ ...base, tools: ["antigravity"], withHooks: false, linkSkills: false });
+      fs.writeFileSync(pkg.rules, "rules v2");
+      fs.writeFileSync(pkg.skill, "skill v2");
+
+      update({ scope: base.scope, dryRun: false, packageRoot: pkg.source });
+
+      const claudeRules = fs.readFileSync(path.join(root, ".claude", "CLAUDE.md"), "utf8");
+      const geminiDir = path.join(root, ".gemini", "config");
+      assert.match(claudeRules, /rules v2/);
+      assert.match(fs.readFileSync(path.join(geminiDir, "AGENTS.md"), "utf8"), /rules v2/);
+      assert.ok(fs.lstatSync(path.join(root, ".claude", "skills", "example")).isSymbolicLink());
+      const copied = path.join(geminiDir, "skills", "example");
+      assert.equal(fs.lstatSync(copied).isSymbolicLink(), false);
+      assert.equal(fs.readFileSync(path.join(copied, "SKILL.md"), "utf8"), "skill v2");
+      const [claude, antigravity] = status({ ...base, tools: ["claude", "antigravity"] });
+      assert.equal(claude?.hookInstalled, true);
+      assert.equal(antigravity?.hookInstalled, false);
+      assert.equal(fs.existsSync(path.join(geminiDir, "hooks.json")), false);
+      uninstall({ ...base, tools: ALL_TOOLS });
+      assert.equal(fs.readFileSync(pkg.skill, "utf8"), "skill v2");
+    });
+  });
+
+  it("update refuses a scope with no recorded installation and writes nothing", () => {
+    withTempRoot("pro-skill-update-empty-", (options, root) => {
+      assert.throws(
+        () => update({ scope: options.scope, dryRun: false, packageRoot: PACKAGE_ROOT }),
+        /No recorded pro-skill installation/,
+      );
+      assert.deepEqual(fs.readdirSync(root), []);
+    });
+  });
+
+  it("update preflights every tool before writing anything", () => {
+    withTempRoot("pro-skill-update-preflight-", (options, root) => {
+      const pkg = fakePackage(root);
+      const base = { ...options, packageRoot: pkg.source };
+      install({ ...base, tools: ["claude"], withHooks: true, linkSkills: true });
+      install({ ...base, tools: ["antigravity"], withHooks: false, linkSkills: false });
+      fs.appendFileSync(path.join(root, ".gemini", "config", "skills", "example", "SKILL.md"), "user edit");
+      fs.writeFileSync(pkg.rules, "rules v2");
+
+      assert.throws(
+        () => update({ scope: base.scope, dryRun: false, packageRoot: pkg.source }),
+        /locally modified resource/,
+      );
+      assert.doesNotMatch(fs.readFileSync(path.join(root, ".claude", "CLAUDE.md"), "utf8"), /rules v2/);
+    });
+  });
+
   it("preflights invalid hook config and invalid skill names before installing", () => {
     withTempRoot("pro-skill-preflight-", (options, root) => {
       const config = path.join(root, ".claude", "settings.json");
@@ -411,6 +482,19 @@ describe("installer", () => {
       assert.equal(failedReinstall.status, 1);
       assert.match(failedReinstall.stderr, /^Error: Refusing to overwrite locally modified resource/);
       assert.doesNotMatch(failedReinstall.stderr, /\bat\s+/);
+
+      fs.writeFileSync(skillFile, fs.readFileSync(path.join(PACKAGE_ROOT, "skills", "validation-loop", "SKILL.md")));
+      const dryUpdate = run("update", "--dry-run");
+      assert.equal(dryUpdate.status, 0, dryUpdate.stderr);
+      assert.match(dryUpdate.stdout, /\[dry-run\] unchanged/);
+      assert.equal(fs.readFileSync(stateFile, "utf8"), before);
+      const updated = run("update");
+      assert.equal(updated.status, 0, updated.stderr);
+      assert.match(updated.stdout, /unchanged\s+hook/);
+      const rejected = run("update", "--with-hooks");
+      assert.equal(rejected.status, 1);
+      assert.match(rejected.stderr, /^Error: update reuses the recorded options/);
+      fs.appendFileSync(skillFile, "\n// user edit\n");
 
       const uninstalled = run("uninstall");
       assert.equal(uninstalled.status, 0, uninstalled.stderr);

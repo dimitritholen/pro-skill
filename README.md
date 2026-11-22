@@ -136,6 +136,10 @@ For stronger test integrity, run comparison checks in trusted CI against an appr
 
 `status` checks local file/configuration presence, including whether the guard script exists and the Antigravity entry is enabled. It does not prove an agent loaded the files, that hook matchers cover every action, or that an agent honored a skill. See [evaluation and integration checks](evaluations/README.md).
 
+### Trade-off with test-first work
+
+The core rules ask for a failing test before each behavior change, and adding a case to an existing test file is the usual way to write one. The guard can't tell an added case from a weakened assertion, so this trade-off is deliberate: in `ask` mode, approve edits that only add cases; with a lock in place, put new cases in a new test file. Neither the guard nor the rules can prove a red run happened. The required report of the red run is a check you can read, not enforcement.
+
 ### Matched Test File Patterns
 A file is treated as a test file if its filename matches `*.test.*`, `*.spec.*`, `*.e2e.*`, `*_test.*`, `test_*.*`, or `*Test(s).{cs,java,kt,swift}`, or if it lives inside a `test/`, `tests/`, `__tests__/`, `spec/`, `specs/`, or `e2e/` directory.
 

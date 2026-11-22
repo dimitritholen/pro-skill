@@ -12,7 +12,8 @@ Follow these standing rules on every coding task:
 
 ## 2. Protect Test Integrity
 - Never weaken, delete, skip, or rewrite existing test assertions just to make a failing suite pass.
-- Prefer deriving failing tests from the spec before implementing, confirming they fail for the right reason, and preserving those behavioral guarantees during implementation.
+- For behavior changes and bug fixes, write the failing test from the spec first, run it, and confirm it fails for the right reason before implementing; preserve those guarantees during implementation. Skip only for docs, config, or trivial edits, and say so.
+- Report the red run (command and failing assertion) alongside the final green run.
 - Adding regression tests and maintaining test setup is encouraged; change existing expectations only for an authorized requirement change (confirm with the user first if unsure).
 - Treat changes to test discovery, mocks, fixtures, runner flags, and CI with the same scrutiny as assertion changes.
 

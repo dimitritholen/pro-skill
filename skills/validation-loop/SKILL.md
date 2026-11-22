@@ -16,10 +16,10 @@ Before editing, identify the fastest reliable feedback commands in the repositor
 If a repo lacks a single verification command, recommend adding one (e.g., `npm run verify`) so every change runs the same gate.
 
 ## 2. Spec-First Tests with Locked Assertions
-Avoid writing tests and implementation together from the same biased mental model:
+Avoid writing tests and implementation together from the same biased mental model. This is the default for behavior changes and bug fixes; skip it only for docs, config, or trivial edits, and state that you skipped it.
 1. State the observable behavior and edge cases from the requirement/spec.
-2. Write or update the failing test first.
-3. Run it and confirm it fails **for the expected reason** (missing behavior or wrong result—not a syntax or setup error).
+2. Write or update the failing test first, before editing the implementation.
+3. Run it and confirm it fails **for the expected reason** (missing behavior or wrong result—not a syntax or setup error). Keep the command and the failing assertion for the report.
 4. Once assertions are agreed upon, preserve their **behavioral guarantees** during implementation:
    - Do not loosen assertions, widen tolerances, mock away the unit under test, or add `.skip`.
    - Add regression cases and maintain test setup without weakening existing guarantees.
@@ -34,6 +34,7 @@ When testing web or desktop UI functionality:
 
 ## 4. Exit Criteria
 Report work as complete only when:
+- For behavior changes and bug fixes, the red run is reported (command and failing assertion, captured before the implementation edit) next to the final green run. If no red run happened, say so and why.
 - Applicable gates have fresh output after the final relevant edit; any failures are classified as pre-existing or introduced, with evidence.
 - Any untested surface, unavailable environment, or unresolved failure is explicit. Report a limitation instead of claiming the affected behavior is verified.
 - State what changed, which checks ran and their results, and any remaining acceptance steps. A green suite proves the tested behavior, not the correctness of the specification.

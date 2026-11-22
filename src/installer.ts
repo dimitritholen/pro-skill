@@ -6,6 +6,7 @@ import {
   fingerprint,
   isValidSkillName,
   readState,
+  scopeRoot,
   writeState,
   type OwnedResource,
 } from "./install-state.js";
@@ -27,6 +28,8 @@ import type {
   StatusOptions,
   ToolStatusReport,
   UninstallOptions,
+  ToolId,
+  UpdateOptions,
 } from "./types.js";
 
 export function listBundledSkills(packageRoot: string): readonly string[] {
@@ -392,4 +395,27 @@ export function status(options: StatusOptions): readonly ToolStatusReport[] {
       hookInstalled,
     };
   });
+}
+
+/** Re-run install for every recorded tool, reusing each tool's recorded hook and link choices. */
+export function update(options: UpdateOptions): OperationResult {
+  const state = readState(options.scope);
+  if (state.tools.length === 0) {
+    throw new Error(`No recorded pro-skill installation in ${scopeRoot(options.scope)}. Run "pro-skill install" first.`);
+  }
+  const hookOwners = new Set(state.resources.filter((r) => r.kind === "script").flatMap((r) => r.owners));
+  const groups = new Map<string, { withHooks: boolean; linkSkills: boolean; tools: ToolId[] }>();
+  for (const tool of state.tools) {
+    const skills = state.resources.filter((r) => r.kind === "skill" && r.owners.includes(tool));
+    const linkSkills = skills.length > 0 && skills.every((r) => r.fingerprint.startsWith("link:"));
+    const withHooks = hookOwners.has(tool);
+    const key = `${withHooks}:${linkSkills}`;
+    const group = groups.get(key) ?? { withHooks, linkSkills, tools: [] };
+    group.tools.push(tool);
+    groups.set(key, group);
+  }
+  const runs = [...groups.values()].map((group) => ({ ...options, ...group, adopt: false }));
+  // Preflight every group before the first write so a refusal leaves nothing half-updated.
+  for (const run of runs) install({ ...run, dryRun: true });
+  return { dryRun: options.dryRun, changes: runs.flatMap((run) => install(run).changes) };
 }

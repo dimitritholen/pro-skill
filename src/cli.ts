@@ -2,7 +2,7 @@
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { install, status, uninstall } from "./installer.js";
+import { install, status, uninstall, update } from "./installer.js";
 import {
   ALL_TOOLS,
   isToolId,
@@ -10,7 +10,7 @@ import {
   type ToolId,
 } from "./types.js";
 
-type Command = "install" | "uninstall" | "status" | "help";
+type Command = "install" | "update" | "uninstall" | "status" | "help";
 
 interface ParsedCli {
   readonly command: Command;
@@ -26,6 +26,7 @@ const HELP_TEXT = `pro-skill - Install engineering discipline rules, skills, and
 
 Usage:
   pro-skill install [options]
+  pro-skill update [--global | --project <dir>] [--dry-run]
   pro-skill uninstall [options]
   pro-skill status [options]
 
@@ -39,10 +40,14 @@ Options:
   --dry-run                Print planned changes without writing anything
   -h, --help               Show this help message
 
+update reinstalls every recorded tool with the hook and copy/link choices it was
+installed with. To change those choices, run install with the new options.
+
 Examples:
   pro-skill install --global --dry-run
   pro-skill install --global --tools claude,pi,antigravity,codex
   pro-skill install --project ./my-app --with-hooks
+  pro-skill update --global
   pro-skill status --global
   pro-skill uninstall --global
 `;
@@ -92,11 +97,11 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
   let command: Command;
   const startIdx = 1;
 
-  if (first === "install" || first === "uninstall" || first === "status") {
+  if (first === "install" || first === "update" || first === "uninstall" || first === "status") {
     command = first;
   } else {
     throw new Error(
-      `Unknown command "${first ?? ""}". Expected one of: install, uninstall, status`,
+      `Unknown command "${first ?? ""}". Expected one of: install, update, uninstall, status`,
     );
   }
 
@@ -106,6 +111,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
   let linkSkills = false;
   let adopt = false;
   let dryRun = false;
+  const installOnly: string[] = [];
 
   for (let i = startIdx; i < argv.length; i++) {
     const arg = argv[i];
@@ -124,18 +130,28 @@ export function parseCliArgs(argv: readonly string[]): ParsedCli {
         throw new Error("--tools requires a comma-separated list of tools.");
       }
       tools = parseTools(raw);
+      installOnly.push(arg);
       i++;
     } else if (arg === "--with-hooks") {
       withHooks = true;
+      installOnly.push(arg);
     } else if (arg === "--link") {
       linkSkills = true;
+      installOnly.push(arg);
     } else if (arg === "--adopt") {
       adopt = true;
+      installOnly.push(arg);
     } else if (arg === "--dry-run") {
       dryRun = true;
     } else {
       throw new Error(`Unknown option: ${arg ?? ""}`);
     }
+  }
+
+  if (command === "update" && installOnly.length > 0) {
+    throw new Error(
+      `update reuses the recorded options and does not accept ${installOnly.join(", ")}. Run install to change them.`,
+    );
   }
 
   return { command, scope, tools, withHooks, linkSkills, adopt, dryRun };
@@ -203,7 +219,9 @@ function main(): void {
             dryRun: parsed.dryRun,
             packageRoot,
           })
-        : uninstall({
+        : parsed.command === "update"
+          ? update({ scope: parsed.scope, dryRun: parsed.dryRun, packageRoot })
+          : uninstall({
             scope: parsed.scope,
             tools: parsed.tools,
             dryRun: parsed.dryRun,

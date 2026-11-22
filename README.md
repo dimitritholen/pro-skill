@@ -61,6 +61,7 @@ To make `pro-skill` available globally on your `PATH`:
 npm link
 pro-skill status --global
 pro-skill install --global --with-hooks
+pro-skill update --global
 pro-skill uninstall --global
 ```
 
@@ -75,7 +76,7 @@ npx skills add <owner>/pro-skill -a claude-code -a codex -a pi -a antigravity
 ## CLI Reference
 
 ```text
-pro-skill <install|uninstall|status> [options]
+pro-skill <install|update|uninstall|status> [options]
 ```
 
 | Flag | Description |
@@ -89,10 +90,12 @@ pro-skill <install|uninstall|status> [options]
 | `--dry-run` | Print planned changes without modifying any files. |
 | `-h, --help` | Print usage help. |
 
+`update` takes only `--global`/`--project <dir>` and `--dry-run`. It reinstalls every recorded tool with the hook and copy/link choices that tool was installed with. To change those choices, run `install` with the new options.
+
 ### Copy Mode vs. `--link` Mode
 
-- **Copy (default):** Copies each skill folder into the tool's skills directory (see Target Paths). Self-contained—keeps working even if you move or delete this repo clone. Re-run `pro-skill install` after editing bundled skills to sync updates. Locally modified installed copies are preserved rather than overwritten.
-- **Link (`--link`):** Creates directory junctions on Windows (symlinks on macOS/Linux) pointing directly at `<repo>/skills/<name>`. Edits to any `SKILL.md` take effect immediately across all tools without reinstalling. *(Changes to `rules/core.md` or `scripts/guard-tests.mjs` still require re-running `pro-skill install`.)*
+- **Copy (default):** Copies each skill folder into the tool's skills directory (see Target Paths). Self-contained—keeps working even if you move or delete this repo clone. Run `pro-skill update` after editing bundled skills to sync updates. Locally modified installed copies are preserved rather than overwritten.
+- **Link (`--link`):** Creates directory junctions on Windows (symlinks on macOS/Linux) pointing directly at `<repo>/skills/<name>`. Edits to any `SKILL.md` take effect immediately across all tools without reinstalling. *(Changes to `rules/core.md` or `scripts/guard-tests.mjs` still require re-running `pro-skill update`.)*
 
 ---
 
@@ -148,7 +151,7 @@ A file is treated as a test file if its filename matches `*.test.*`, `*.spec.*`,
 ## Updating & Uninstalling
 
 - **Ownership:** Each scope records installed tools, resource owners, and content hashes in `.agents/pro-skill/install-state.json`. Keep this file with the installation. Unmanaged skill/script collisions are refused before writes, including in dry-run mode. Rules outside the managed block and unrelated hook handlers are preserved.
-- **Updating:** Edit bundled content, run `npm run verify`, and re-run `install`. Updates refuse locally modified copied skills or guard scripts. Save or move those changes aside before reinstalling. Linked skills track the link destination, allowing their source content to change normally.
+- **Updating:** Pull or edit bundled content, run `npm run verify`, then `pro-skill update --global` (or `--project <dir>`). It reapplies each tool's recorded hook and link choices and preflights every tool before writing. Updates refuse locally modified copied skills or guard scripts. Save or move those changes aside before reinstalling. Linked skills track the link destination, allowing their source content to change normally.
 - **Uninstalling:** Run `uninstall --global` (or `--project <dir>`). Only recorded installations are removed. Shared resources and project rules remain while another installed tool needs them. Modified skill/script content is reported as `preserved` and becomes unmanaged. A later install will refuse that collision until you move it aside.
 - **Older installations:** Installations without an ownership record are refused by default so unmanaged skills aren't silently overwritten. Pass `--adopt` (e.g., `pro-skill install --global --with-hooks --adopt`) to migrate an existing `pro-skill` install into `install-state.json`, or back up and move conflicting directories aside first. When migrating Antigravity, its old global copies in `~/.agents/skills/` remain untouched because other agents may use them. Managed rule blocks and exact pro-skill hook commands are updated in place.
 - **Failure recovery:** Collision/config preflight happens before writes; filesystem operations are not a transaction. Do not run concurrent installs/uninstalls in one scope. If an I/O failure interrupts installation, preserve the ownership record and inspect partial changes before retrying.

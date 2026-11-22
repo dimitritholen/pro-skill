@@ -65,6 +65,12 @@ pro-skill update --global
 pro-skill uninstall --global
 ```
 
+To pull the checked-out branch (normally `main`), reinstall dependencies, rebuild, and update your global install in one step, run from this repo:
+```bash
+npm run self-upgrade
+```
+It updates the global install only; for a project install, run `pro-skill update --project <dir>` afterwards. Use `npm run self-upgrade`, not `npm upgrade`: the latter is npm's alias for `npm update`.
+
 ### Installing Skills Only via `npx skills`
 Because skills follow the standard `skills/<name>/SKILL.md` layout, anyone can install just the skills once this repo is pushed to GitHub:
 ```bash

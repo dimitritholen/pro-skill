@@ -452,6 +452,21 @@ describe("installer", () => {
     });
   });
 
+  it("runs the CLI when started through a linked path, as npm link and global installs do", () => {
+    withTempRoot("pro-skill-cli-link-", (_options, root) => {
+      const link = path.join(root, "dist");
+      try {
+        fs.symlinkSync(path.dirname(path.dirname(CLI_ENTRY)), link, process.platform === "win32" ? "junction" : "dir");
+        const res = spawnSync(process.execPath, [path.join(link, "src", "cli.js"), "--help"], { encoding: "utf8" });
+        assert.equal(res.status, 0, res.stderr);
+        assert.match(res.stdout, /Usage:/);
+      } finally {
+        // Remove the link itself first so cleanup can never recurse into the build output.
+        if (fs.existsSync(link)) fs.unlinkSync(link);
+      }
+    });
+  });
+
   it("runs the real CLI cleanly for install, status, preserved detail, errors, and uninstall", () => {
     withTempRoot("pro-skill-cli-", (_options, root) => {
       const run = (...args: string[]) =>

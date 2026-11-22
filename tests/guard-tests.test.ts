@@ -4,7 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { sameFile as cliSameFile } from "../src/cli.js";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -26,6 +27,16 @@ function runGuard(
 }
 
 describe("guard-tests.mjs", () => {
+  it("sameFile falls back to plain path comparison when a path cannot be resolved", async () => {
+    const guard = (await import(pathToFileURL(GUARD_SCRIPT).href)) as { sameFile: (a: string, b: string) => boolean };
+    const missing = path.join(os.tmpdir(), "pro-skill-missing-dir", "cli.js");
+    for (const sameFile of [guard.sameFile, cliSameFile]) {
+      assert.equal(sameFile(missing, missing), true, "an unresolvable path must not throw or disable the entry point");
+      assert.equal(sameFile(missing, GUARD_SCRIPT), false);
+      assert.equal(sameFile(GUARD_SCRIPT, GUARD_SCRIPT), true);
+    }
+  });
+
   it("still runs when started through a linked path", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-guard-link-"));
     const link = path.join(tmp, "scripts");

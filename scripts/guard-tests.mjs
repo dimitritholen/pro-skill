@@ -237,11 +237,23 @@ async function main() {
   process.exit(0);
 }
 
+/**
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+export function sameFile(a, b) {
+  try {
+    return fs.realpathSync(a) === fs.realpathSync(b);
+  } catch {
+    // Unresolvable path (missing, permissions, loop): never throw here, or the guard would fail open.
+    return path.resolve(a) === path.resolve(b);
+  }
+}
+
 // Compare real paths: npm link and global installs start this file through a symlink or junction.
 const isDirectExecution =
-  process.argv[1] !== undefined &&
-  fs.existsSync(process.argv[1]) &&
-  fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  process.argv[1] !== undefined && sameFile(process.argv[1], fileURLToPath(import.meta.url));
 
 if (isDirectExecution) {
   void main();

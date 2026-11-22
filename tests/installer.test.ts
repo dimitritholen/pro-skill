@@ -467,6 +467,12 @@ describe("installer", () => {
     });
   });
 
+  it("runs the CLI when started without its .js extension", () => {
+    const res = spawnSync(process.execPath, [CLI_ENTRY.replace(/\.js$/, ""), "--help"], { encoding: "utf8" });
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /Usage:/);
+  });
+
   it("runs the real CLI cleanly for install, status, preserved detail, errors, and uninstall", () => {
     withTempRoot("pro-skill-cli-", (_options, root) => {
       const run = (...args: string[]) =>

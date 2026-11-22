@@ -16,6 +16,7 @@ Use the type system as an executable specification that catches whole classes of
 - Treat external input (HTTP payloads, CLI args, JSON files, env vars, tool stdin) as `unknown`.
 - Parse once at the system boundary into strict domain types; keep internal functions free of repetitive defensive null/type checks.
 - Static types do not validate JSON, authorize actions, enforce database constraints, or prevent concurrent state changes. Keep runtime checks at the layers responsible for those guarantees.
+- Fail loudly and propagate errors with context—never hide failures behind empty `catch` blocks or silent fallback values.
 - Avoid `any`, unchecked `as SomeType` assertions, and non-null `!` escapes. When narrowing is required, write a small, tested type guard or parser.
 
 ## 3. Compiler-Driven Refactoring

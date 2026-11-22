@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -251,9 +252,11 @@ function main(): void {
   }
 }
 
+// Compare real paths: npm link and global installs start this file through a symlink or junction.
 const isDirectExecution =
   process.argv[1] !== undefined &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+  fs.existsSync(process.argv[1]) &&
+  fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
 
 if (isDirectExecution) {
   main();

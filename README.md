@@ -65,6 +65,12 @@ pro-skill update --global
 pro-skill uninstall --global
 ```
 
+To pull the latest version, rebuild, and update your global install in one step, run from this repo:
+```bash
+npm run upgrade
+```
+It updates the global install only; for a project install, run `pro-skill update --project <dir>` after `npm run upgrade`.
+
 ### Installing Skills Only via `npx skills`
 Because skills follow the standard `skills/<name>/SKILL.md` layout, anyone can install just the skills once this repo is pushed to GitHub:
 ```bash

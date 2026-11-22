@@ -26,6 +26,22 @@ function runGuard(
 }
 
 describe("guard-tests.mjs", () => {
+  it("still runs when started through a linked path", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-guard-link-"));
+    const link = path.join(tmp, "scripts");
+    try {
+      fs.symlinkSync(path.dirname(GUARD_SCRIPT), link, process.platform === "win32" ? "junction" : "dir");
+      const res = spawnSync(process.execPath, [path.join(link, "guard-tests.mjs")], {
+        input: "{}", encoding: "utf8", env: { ...process.env, PRO_SKILL_TEST_GUARD: "deny" },
+      });
+      assert.equal(res.status, 2, "a guard that exits 0 here silently allows every edit");
+    } finally {
+      // Remove the link itself first so cleanup can never recurse into the repository.
+      if (fs.existsSync(link)) fs.unlinkSync(link);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("finds repository locks above cwd and accepts Antigravity workspace metadata", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-lock-"));
     try {

@@ -262,8 +262,13 @@ export function sameFile(a: string, b: string): boolean {
 }
 
 // Compare real paths: npm link and global installs start this file through a symlink or junction.
+const modulePath = fileURLToPath(import.meta.url);
+const entryArg = process.argv[1];
+// `node dist/src/cli` (no extension) leaves argv[1] without the ".js" Node resolved.
 const isDirectExecution =
-  process.argv[1] !== undefined && sameFile(process.argv[1], fileURLToPath(import.meta.url));
+  entryArg !== undefined &&
+  (sameFile(entryArg, modulePath) ||
+    (path.extname(entryArg) === "" && sameFile(`${entryArg}.js`, modulePath)));
 
 if (isDirectExecution) {
   main();

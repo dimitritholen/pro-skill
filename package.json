@@ -19,7 +19,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "test": "node tests/run.mjs",
     "verify": "npm run typecheck && npm run build && npm test",
     "self-upgrade": "git pull --ff-only && npm ci && npm run build && node dist/src/cli.js update --global",

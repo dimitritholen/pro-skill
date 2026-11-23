@@ -20,12 +20,6 @@ export function resolveToolTarget(tool: ToolId, scope: InstallScope): ToolTarget
             scriptInstallPath: guardScriptPath,
           },
         };
-      case "pi":
-        return {
-          tool,
-          rulesFile: path.join(home, ".pi", "agent", "AGENTS.md"),
-          skillsDir: sharedSkillsDir,
-        };
       case "antigravity":
         return {
           tool,
@@ -63,12 +57,6 @@ export function resolveToolTarget(tool: ToolId, scope: InstallScope): ToolTarget
           configPath: path.join(root, ".claude", "settings.json"),
           scriptInstallPath: guardScriptPath,
         },
-      };
-    case "pi":
-      return {
-        tool,
-        rulesFile: path.join(root, "AGENTS.md"),
-        skillsDir: projectSkillsDir,
       };
     case "antigravity":
       return {

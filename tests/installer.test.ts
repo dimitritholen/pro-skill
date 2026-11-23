@@ -64,11 +64,11 @@ describe("installer", () => {
     });
   });
 
-  it("installs globally across all 4 tools, stays idempotent, preserves user rules, and uninstalls cleanly", () => {
+  it("installs globally across all 3 tools, stays idempotent, preserves user rules, and uninstalls cleanly", () => {
     withTempRoot("pro-skill-home-", (options, tmpHome) => {
-      const piRules = path.join(tmpHome, ".pi", "agent", "AGENTS.md");
-      fs.mkdirSync(path.dirname(piRules), { recursive: true });
-      fs.writeFileSync(piRules, "# Existing Pi Rules\nKeep me intact.\n");
+      const userRules = path.join(tmpHome, ".gemini", "config", "AGENTS.md");
+      fs.mkdirSync(path.dirname(userRules), { recursive: true });
+      fs.writeFileSync(userRules, "# Existing Antigravity Rules\nKeep me intact.\n");
 
       const claudeSettings = path.join(tmpHome, ".claude", "settings.json");
       fs.mkdirSync(path.dirname(claudeSettings), { recursive: true });
@@ -84,9 +84,9 @@ describe("installer", () => {
       });
       assert.ok(first.changes.some((c) => c.action === "created"));
 
-      const piAfter = fs.readFileSync(piRules, "utf8");
-      assert.ok(piAfter.startsWith("# Existing Pi Rules\nKeep me intact.\n"));
-      assert.ok(piAfter.includes("<!-- pro-skill:start -->"));
+      const userAfter = fs.readFileSync(userRules, "utf8");
+      assert.ok(userAfter.startsWith("# Existing Antigravity Rules\nKeep me intact.\n"));
+      assert.ok(userAfter.includes("<!-- pro-skill:start -->"));
 
       const reports = status({
         scope: options.scope,
@@ -120,8 +120,8 @@ describe("installer", () => {
       assert.ok(removed.changes.some((c) => c.action === "removed"));
 
       assert.equal(
-        fs.readFileSync(piRules, "utf8"),
-        "# Existing Pi Rules\nKeep me intact.\n",
+        fs.readFileSync(userRules, "utf8"),
+        "# Existing Antigravity Rules\nKeep me intact.\n",
       );
       assert.deepEqual(JSON.parse(fs.readFileSync(claudeSettings, "utf8")), {
         permissions: { allow: ["Read"] },
@@ -224,7 +224,7 @@ describe("installer", () => {
   it("retains shared skills and scripts until the last owner uninstalls", () => {
     withTempRoot("pro-skill-shared-", (options, root) => {
       install({ ...options, tools: ALL_TOOLS, withHooks: true });
-      uninstall({ ...options, tools: ["claude", "pi"] });
+      uninstall({ ...options, tools: ["claude"] });
       assert.equal(
         fs.existsSync(path.join(root, ".agents", "skills", "validation-loop", "SKILL.md")),
         true,
@@ -252,8 +252,8 @@ describe("installer", () => {
   it("retains project rules used by remaining tools", () => {
     withTempRoot("pro-skill-proj-shared-", (options, root) => {
       const project = { ...options, scope: { kind: "project" as const, projectDir: root } };
-      install({ ...project, tools: ["pi", "codex"] });
-      uninstall({ ...project, tools: ["pi"] });
+      install({ ...project, tools: ["antigravity", "codex"] });
+      uninstall({ ...project, tools: ["antigravity"] });
       assert.match(fs.readFileSync(path.join(root, "AGENTS.md"), "utf8"), /pro-skill:start/);
     });
   });

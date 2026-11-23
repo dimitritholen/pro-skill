@@ -1,6 +1,6 @@
 # pro-skill
 
-Installable engineering discipline, focused Agent Skills, and an optional test-integrity guard hook for **Claude Code**, **Pi**, **Antigravity**, and **Codex**.
+Installable engineering discipline, focused Agent Skills, and an optional test-integrity guard hook for **Claude Code**, **Antigravity**, and **Codex**.
 
 ## Philosophy
 
@@ -47,7 +47,7 @@ node dist/src/cli.js install --global
 node dist/src/cli.js install --global --with-hooks
 
 # Specific tools only
-node dist/src/cli.js install --global --tools claude,pi,antigravity,codex
+node dist/src/cli.js install --global --tools claude,antigravity,codex
 
 # Into a single repository instead of global user config
 node dist/src/cli.js install --project ./path/to/repo --with-hooks
@@ -74,7 +74,7 @@ It updates the global install only; for a project install, run `pro-skill update
 ### Installing Skills Only via `npx skills`
 Because skills follow the standard `skills/<name>/SKILL.md` layout, anyone can install just the skills once this repo is pushed to GitHub:
 ```bash
-npx skills add <owner>/pro-skill -a claude-code -a codex -a pi -a antigravity
+npx skills add <owner>/pro-skill -a claude-code -a codex -a antigravity
 ```
 
 ---
@@ -89,7 +89,7 @@ pro-skill <install|update|uninstall|status> [options]
 | :--- | :--- |
 | `--global` | Target global user configuration directories *(default)*. |
 | `--project <dir>` | Target a specific repository/project directory. |
-| `--tools <list>` | Comma-separated subset of `claude,pi,antigravity,codex` *(default: all)*. |
+| `--tools <list>` | Comma-separated subset of `claude,antigravity,codex` *(default: all)*. |
 | `--with-hooks` | Also install and wire `guard-tests.mjs` for Claude Code and Antigravity. |
 | `--link` | Symlink/junction skill directories directly from this repo instead of copying. |
 | `--adopt` | Adopt/overwrite existing unmanaged or modified skills and guard scripts into `install-state.json`. |
@@ -110,12 +110,11 @@ pro-skill <install|update|uninstall|status> [options]
 | Tool | Global Rules | Global Skills | Global Hook (`--with-hooks`) |
 | :--- | :--- | :--- | :--- |
 | **Claude Code** | `~/.claude/CLAUDE.md` | `~/.claude/skills/` | `~/.claude/settings.json` |
-| **Pi** | `~/.pi/agent/AGENTS.md` | `~/.agents/skills/` | — |
 | **Antigravity** | `~/.gemini/config/AGENTS.md` | `~/.gemini/config/skills/` | `~/.gemini/config/hooks.json` |
 | **Codex** | `~/.codex/AGENTS.md` | `~/.agents/skills/` | — |
 
 In `--project <dir>` mode:
-- Rules: `<dir>/CLAUDE.md` (Claude Code) and `<dir>/AGENTS.md` (shared by Pi, Antigravity, Codex).
+- Rules: `<dir>/CLAUDE.md` (Claude Code) and `<dir>/AGENTS.md` (shared by Antigravity and Codex).
 - Skills: `<dir>/.claude/skills/` and `<dir>/.agents/skills/`.
 - Hooks: `<dir>/.claude/settings.json` and `<dir>/.agents/hooks.json`.
 
@@ -123,7 +122,7 @@ In `--project <dir>` mode:
 
 ## Test-Integrity Guard Hook (`--with-hooks`)
 
-When enabled, `guard-tests.mjs` is installed to `.agents/pro-skill/guard-tests.mjs` and wired as a `PreToolUse` file-edit hook in **Claude Code** (`settings.json`) and **Antigravity** (`hooks.json`). *(Pi and Codex do not expose a standardized `PreToolUse` hook config, so they rely on the standing rule + `validation-loop` skill.)*
+When enabled, `guard-tests.mjs` is installed to `.agents/pro-skill/guard-tests.mjs` and wired as a `PreToolUse` file-edit hook in **Claude Code** (`settings.json`) and **Antigravity** (`hooks.json`). *(Codex does not expose a standardized `PreToolUse` hook config, so it relies on the standing rule + `validation-loop` skill.)*
 
 ### Behavior
 
@@ -162,7 +161,7 @@ A file is treated as a test file if its filename matches `*.test.*`, `*.spec.*`,
 - **Older installations:** Installations without an ownership record are refused by default so unmanaged skills aren't silently overwritten. Pass `--adopt` (e.g., `pro-skill install --global --with-hooks --adopt`) to migrate an existing `pro-skill` install into `install-state.json`, or back up and move conflicting directories aside first. When migrating Antigravity, its old global copies in `~/.agents/skills/` remain untouched because other agents may use them. Managed rule blocks and exact pro-skill hook commands are updated in place.
 - **Failure recovery:** Collision/config preflight happens before writes; filesystem operations are not a transaction. Do not run concurrent installs/uninstalls in one scope. If an I/O failure interrupts installation, preserve the ownership record and inspect partial changes before retrying.
 
-Target paths and Antigravity tool names follow the [Antigravity discovery](https://antigravity.google/docs/customization-discovery) and [hook](https://antigravity.google/docs/hooks) contracts. Pi's shared skill paths follow its [skill documentation](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md); Claude hook decisions follow its [hook reference](https://code.claude.com/docs/en/hooks). These contracts require periodic live checks against specific agent versions.
+Target paths and Antigravity tool names follow the [Antigravity discovery](https://antigravity.google/docs/customization-discovery) and [hook](https://antigravity.google/docs/hooks) contracts. Claude hook decisions follow its [hook reference](https://code.claude.com/docs/en/hooks). These contracts require periodic live checks against specific agent versions.
 
 ---
 

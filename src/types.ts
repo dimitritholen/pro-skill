@@ -1,4 +1,4 @@
-export const ALL_TOOLS = ["claude", "pi", "antigravity", "codex"] as const;
+export const ALL_TOOLS = ["claude", "antigravity", "codex"] as const;
 
 export type ToolId = (typeof ALL_TOOLS)[number];
 

@@ -34,7 +34,7 @@ Usage:
 Options:
   --global                 Target global user config dirs (default)
   --project <dir>          Target a specific repository/project directory
-  --tools <list>           Comma-separated tools: claude,pi,antigravity,codex (default: all)
+  --tools <list>           Comma-separated tools: claude,antigravity,codex (default: all)
   --with-hooks             Also install the optional test-tampering guard hook (Claude Code & Antigravity)
   --link                   Symlink/junction skills from this repo instead of copying
   --adopt                  Adopt/overwrite existing unmanaged or modified skills/scripts into install state
@@ -46,7 +46,7 @@ installed with. To change those choices, run install with the new options.
 
 Examples:
   pro-skill install --global --dry-run
-  pro-skill install --global --tools claude,pi,antigravity,codex
+  pro-skill install --global --tools claude,antigravity,codex
   pro-skill install --project ./my-app --with-hooks
   pro-skill update --global
   pro-skill status --global

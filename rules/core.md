@@ -1,20 +1,19 @@
 # Engineering Discipline (pro-skill)
 
-Follow these standing rules on every coding task:
+Follow these standing rules on every coding task. Scale the ceremony to the risk: a small, reversible change gets a quick check and moves on; shared behaviour, data, money and security get the full loop.
 
 ## 1. Validate with Real Signals
-- Before editing, identify the repository's verification commands and note any pre-existing failures.
-- Use focused checks while iterating, then run the applicable repository gates (types, lint, tests, build, runtime/UI) and read their output before reporting success.
+- Know the repository's fast checks (typecheck, the tests near the change) and use them while iterating.
+- Leave the full gates (whole suite, build, slow checks) to CI unless the change touches shared behaviour; read the result before reporting success.
 - Scale verification to risk and report exact checks, results, and any unverified surfaces; never present an unrun check as passing.
-- Prefer deterministic tool feedback (compiler, linter, test runner, LSP diagnostics) over guessing; LSP speeds up iteration, but a real build/test run still gates completion.
+- Prefer deterministic tool feedback (compiler, linter, test runner, LSP diagnostics) over guessing.
 - Reproduce ambiguous failures and investigate root cause before editing—don't mask broken invariants with extra null checks, retries, or sleeps.
 - For UI behavior, test through accessibility interfaces (ARIA roles, labels, keyboard focus, OS accessibility trees) and pair with visual checks for layout/styling changes.
 
 ## 2. Protect Test Integrity
 - Never weaken, delete, skip, or rewrite existing test assertions just to make a failing suite pass.
-- For behavior changes and bug fixes, write the failing test from the spec first, run it, and confirm it fails for the right reason before implementing; preserve those guarantees during implementation. Skip only for docs, config, or trivial edits, and say so.
+- Write tests for non-trivial logic (a branch, a loop, a parser, money or security code) and for bug fixes, preferably failing first. No tests for docs, prompts, config or trivial edits.
 - Test observable behavior and edge cases rather than internal implementation details or mock call sequences.
-- Report the red run (command and failing assertion) alongside the final green run.
 - Adding regression tests and maintaining test setup is encouraged; change existing expectations only for an authorized requirement change (confirm with the user first if unsure).
 - Treat changes to test discovery, mocks, fixtures, runner flags, and CI with the same scrutiny as assertion changes.
 

@@ -91,11 +91,15 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+// Targets that were dropped from pro-skill; a state written while they existed still names them.
+const REMOVED_TOOLS: readonly string[] = ["pi"];
+
 function parseTools(value: unknown): ToolId[] {
-  if (!Array.isArray(value) || !value.every((item: unknown) => typeof item === "string" && isToolId(item))) {
+  const current = Array.isArray(value) ? value.filter((item: unknown) => !REMOVED_TOOLS.includes(item as string)) : value;
+  if (!Array.isArray(current) || !current.every((item: unknown) => typeof item === "string" && isToolId(item))) {
     throw new Error("Invalid install state tools");
   }
-  return value as ToolId[];
+  return current as ToolId[];
 }
 
 export function readState(scope: InstallScope): InstallState {
@@ -124,7 +128,7 @@ export function readState(scope: InstallScope): InstallState {
     if (!allowed) throw new Error(`Unsafe install state path: ${resourcePath}`);
     assertSafePath(scope, absolute, kind === "skill");
     return { kind, path: absolute, fingerprint: hash, owners: parseTools(rec["owners"]) };
-  });
+  }).filter((r) => r.owners.length > 0); // owned only by a removed target: no longer managed
   return { version: 1, tools: parseTools(root["tools"]), resources };
 }
 

@@ -434,6 +434,24 @@ describe("installer", () => {
     });
   });
 
+  it("reads an install state written when Pi was still a target", () => {
+    withTempRoot("pro-skill-legacy-pi-", (options, root) => {
+      const codex = { ...options, tools: ["codex"] as const };
+      install(codex);
+      const state = path.join(root, ".agents", "pro-skill", "install-state.json");
+      const legacy = JSON.parse(fs.readFileSync(state, "utf8"));
+      legacy.tools.push("pi");
+      for (const r of legacy.resources) r.owners.push("pi");
+      fs.writeFileSync(state, JSON.stringify(legacy));
+      install(codex);
+      const after = JSON.parse(fs.readFileSync(state, "utf8"));
+      assert.deepEqual(after.tools, ["codex"]);
+      assert.ok(after.resources.every((r: { owners: string[] }) => !r.owners.includes("pi")));
+      uninstall(codex);
+      assert.equal(fs.existsSync(path.join(root, ".agents", "skills", "validation-loop")), false);
+    });
+  });
+
   it("refuses skill ancestors redirected outside the scope through a junction", () => {
     withTempRoot("pro-skill-junction-", (options, root) => {
       const outside = fs.mkdtempSync(path.join(os.tmpdir(), "pro-skill-outside-"));
